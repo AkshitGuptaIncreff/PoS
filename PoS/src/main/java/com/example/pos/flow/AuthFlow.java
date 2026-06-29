@@ -10,14 +10,18 @@ import com.example.pos.models.db.SessionPojo;
 import com.example.pos.models.db.UserPojo;
 import com.example.pos.models.db.UserRole;
 import com.example.pos.util.ApiException;
-import com.example.pos.util.Utils;
+import com.example.pos.util.Helper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletResponse;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 
 @Service
@@ -35,33 +39,28 @@ public class AuthFlow {
     private SessionApi sessionApi;
 
 
-    public AuthData login(AuthForm form){
+    public AuthData login(UserPojo userPojo) {
+        UserPojo user = userApi.findByEmail(userPojo.getEmail());
 
-        String email = Utils.trimAndLowercase(form.getEmail());
-        UserPojo user = userApi.findByEmail(email);
-
-        if(user == null){
+        if (user == null) {
             throw new ApiException("Invalid Cred");
         }
 
-        if(!passwordEncoder.matches(form.getPassword(), user.getPasswordHash())){
+        if (!passwordEncoder.matches(userPojo.getPasswordHash(), user.getPasswordHash())) {
             throw new ApiException("Invalid Cred");
         }
 
         SessionPojo session = sessionApi.createSession(user);
-
         AuthData data = new AuthData();
-
         data.setEmail(user.getEmail());
         data.setRole(user.getRole());
         data.setSessionId(session.getSessionId());
-
         return data;
     }
 
     public AuthData signUp(AuthForm form){
 
-        String email = Utils.trimAndLowercase(form.getEmail());
+        String email = Helper.trimAndLowercase(form.getEmail());
         UserPojo user = userApi.findByEmail(email);
 
         if(user != null){
@@ -92,20 +91,51 @@ public class AuthFlow {
         return supervisors.contains(email) ? UserRole.SUPERVISOR : UserRole.OPERATOR;
     }
 
-    public UserPojo validateSession(String sessionId){
-
+    public UserPojo validateSession(String sessionId, HttpServletResponse response) {
         SessionPojo session = sessionApi.findBySessionId(sessionId);
-        if(session == null){
+        if (session == null) {
             throw new ApiException("Invalid session");
         }
-        if(session.getExpiresAt().isBefore(Instant.now())){
+        if (session.getExpiresAt().isBefore(Instant.now())) {
+            sessionApi.delete(session.getId());
             throw new ApiException("Session expired");
         }
 
+        Instant now = Instant.now();
+        String finalSessionId = session.getSessionId();
+
+        if (now.isAfter(session.getCreatedAt().plus(5, ChronoUnit.MINUTES))) {
+
+            // Rotate session ID in-place
+            String newSessionId = UUID.randomUUID().toString();
+            session.setSessionId(newSessionId);
+            session.setCreatedAt(now);
+            session.setExpiresAt(now.plus(5, ChronoUnit.MINUTES));
+            sessionApi.updateSession(session);
+            finalSessionId = newSessionId;
+
+            // Set response header and cookie so the client picks up the new ID
+            response.setHeader("sessionId", newSessionId);
+            Cookie cookie = new Cookie("sessionId", newSessionId);
+            cookie.setHttpOnly(true);
+            cookie.setPath("/");
+            cookie.setMaxAge(300);
+            cookie.setSecure(false);
+            try {
+                cookie.setAttribute("SameSite", "Lax");
+            } catch (NoSuchMethodError ignored) {}
+            response.addCookie(cookie);
+        } else {
+            session.setExpiresAt(now.plus(5, ChronoUnit.MINUTES));
+            sessionApi.updateSession(session);
+        }
+
         UserPojo user = userApi.findById(session.getUserId());
-        if(user == null){
+        if (user == null) {
             throw new ApiException("User not found");
         }
+
+        UserContext.setSessionId(finalSessionId);
         return user;
     }
 

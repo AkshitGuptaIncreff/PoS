@@ -21,6 +21,8 @@ public class SessionPojo {
     @Indexed(unique = true)
     private String sessionId;
 
-    @Indexed(expireAfter = "5m")
+    private Instant createdAt;
+
+    @Indexed(expireAfter = "1h")
     private Instant expiresAt;
 }

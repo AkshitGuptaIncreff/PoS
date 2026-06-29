@@ -16,7 +16,6 @@ import java.io.InputStream;
 import java.io.StringWriter;
 
 public class XmlUtil {
-
     public static String toXml(InvoiceForm invoiceForm) {
 
         try {

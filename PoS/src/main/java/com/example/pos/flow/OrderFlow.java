@@ -3,10 +3,11 @@ package com.example.pos.flow;
 import com.example.pos.api.InventoryApi;
 import com.example.pos.api.OrderApi;
 import com.example.pos.api.ProductApi;
+import com.example.pos.models.PageData;
 import com.example.pos.util.ApiException;
-import com.example.pos.util.Utils;
-import com.example.pos.models.OrderData;
+import com.example.pos.util.Helper;
 import com.example.pos.models.OrderStatus;
+import com.example.pos.models.OrderView;
 import com.example.pos.models.CreateOrderForm;
 import com.example.pos.models.db.InventoryPojo;
 import com.example.pos.models.db.OrderItemPojo;
@@ -22,6 +23,8 @@ import java.util.*;
 @Service
 public class OrderFlow {
 
+    private static final Set<OrderStatus> CANCELLABLE_STATES = Set.of(OrderStatus.UNFULFILLED, OrderStatus.FULFILLED);
+
     @Autowired
     private OrderApi orderApi;
 
@@ -32,121 +35,123 @@ public class OrderFlow {
     private ProductApi productApi;
 
     @Transactional
-    public OrderData createOrder(CreateOrderForm form) {
-        // If barcodes valid, validate inventory presence, see if inventory available so reduce it otherwise just create
+    public OrderView createOrder(CreateOrderForm form) {
+        Map<String, Integer> requiredQuantityFromBarcodes = Helper.aggregateOrderItemsByBarcodeForm(form.getItems());
 
-        // Aggregate Barcodes
-        Map<String, Integer> requiredQuantityFromBarcodes = Utils.aggregateOrderItemsByBarcodeForm(form.getItems());
-
-        // Bulk extraction of ProductPojos form Barcodes
         List<String> barcodes = new ArrayList<>(requiredQuantityFromBarcodes.keySet());
         List<ProductPojo> products = productApi.findByBarcodes(barcodes);
-        // Barcode Existence - Does all barcode exists in database - if not throws exception
-        boolean validBarcode = Utils.allBarcodeExistsInDatabase(barcodes,products);
-        // Map of (barcodes,productPojos) for quick Pojo access via Barcodes
-        Map<String, ProductPojo> productMap = Utils.mapBarcodeWithProductPojo(products);
+        Helper.allBarcodeExistsInDatabase(barcodes, products);
+        Map<String, ProductPojo> productMap = Helper.mapBarcodeWithProductPojo(products);
 
-        // Inventory Quantity state by Barcodes & conversion to Map (barcode,InventoryPojo)
         List<InventoryPojo> inventories = inventoryApi.findByBarcodes(barcodes);
-        Map<String, InventoryPojo> inventoryMap = Utils.mapBarcodeWithInventoryPojo(inventories);
+        Map<String, InventoryPojo> inventoryMap = Helper.mapBarcodeWithInventoryPojo(inventories);
 
-        // Validate if the order can be fulfilled or not
-        Utils.ValidationResult result = Utils.validateOrderFulfillment(requiredQuantityFromBarcodes, productMap, inventoryMap);
+        Helper.ValidationResult result = Helper.validateOrderFulfillment(requiredQuantityFromBarcodes, productMap, inventoryMap);
         boolean canFulfill = result.canFulfill();
         List<String> errors = result.errors();
 
         OrderStatus status = canFulfill ? OrderStatus.FULFILLED : OrderStatus.UNFULFILLED;
-        // Build Order for both Fulfilled and Unfulfilled state
-        // OrderItemForm -> OrderItemPojo -> OrderPojo -> Save
-        List<OrderItemPojo> orderItems = Utils.OrderItemFormToPojo(form.getItems());
-        OrderPojo order = Utils.orderPojoCreation(orderItems,form,status);
+
+        List<OrderItemPojo> orderItems = Helper.OrderItemFormToPojo(form.getItems());
+        OrderPojo order = Helper.orderPojoCreation(orderItems, form, status);
         OrderPojo savedOrder = orderApi.saveOrder(order);
 
-        if(canFulfill) {
+        if (canFulfill) {
             inventoryApi.reduceInventory(requiredQuantityFromBarcodes);
-            return Utils.buildOrderResponse(savedOrder, "Order fulfilled successfully", Collections.emptyList(), productMap);
         }
-        return Utils.buildOrderResponse(savedOrder, "Order created but inventory unavailable", errors, productMap);
+
+        OrderView view = new OrderView();
+        view.setOrder(savedOrder);
+        view.setProductMap(productMap);
+        view.setMessage(canFulfill ? "Order fulfilled successfully" : "Order created but inventory unavailable");
+        view.setErrors(canFulfill ? Collections.emptyList() : errors);
+        return view;
     }
 
-    public List<OrderData> getOrders(String orderId, OrderStatus status, Instant startDate, Instant endDate) {
+    public PageData<OrderView> getOrders(String orderId, OrderStatus status, Instant startDate, Instant endDate, int page, int size) {
+        PageData<OrderPojo> pageData = orderApi.getOrders(orderId, status, startDate, endDate, page, size);
 
-        // Extract barcodes form orderPojo and get productPojo to inturn have product name
-        List<OrderPojo> orders = orderApi.getOrders(orderId,status,startDate,endDate);
-        Set<String> barcodes = Utils.barcodesFromOrderPojo(orders);
-
+        Set<String> barcodes = Helper.barcodesFromOrderPojo(pageData.getContent());
         List<ProductPojo> products = productApi.findByBarcodes(barcodes);
-        Map<String, ProductPojo> productMap = Utils.mapBarcodeWithProductPojo(products);
+        Map<String, ProductPojo> productMap = Helper.mapBarcodeWithProductPojo(products);
 
-        List<OrderData> orderDataList = Utils.buildOrderResponseList(orders,productMap);
-        return orderDataList;
+        List<OrderView> views = new ArrayList<>();
+        for (OrderPojo order : pageData.getContent()) {
+            OrderView view = Helper.orderViewBuilder(productMap, order);
+            views.add(view);
+        }
+
+        PageData<OrderView> result = new PageData<>();
+        result.setContent(views);
+        result.setTotalElements(pageData.getTotalElements());
+        result.setTotalPages(pageData.getTotalPages());
+        result.setPage(pageData.getPage());
+        result.setSize(pageData.getSize());
+        return result;
     }
 
     @Transactional
-    public OrderData retryOrder(String orderId) {
-        // retry => extract order, check if it's status is unfulfilled, try to check the inventory (by aggregated barcode) => Yes/No
-
-        // Order in Unfulfilled state or not
+    public OrderView retryOrder(String orderId) {
         OrderPojo order = orderApi.getOrderById(orderId);
-        if(order==null || order.getOrderStatus()!=OrderStatus.UNFULFILLED){
-            throw new ApiException("Only Unfulfilled order can be Reordered...");
+        if (order == null || order.getOrderStatus() != OrderStatus.UNFULFILLED) {
+            throw new ApiException("Only Unfulfilled order can be Retried...");
         }
 
-        // Aggregate Products
-        Map<String,Integer> requiredQuantityFromBarcodes = Utils.aggregateOrderItemsByBarcodePojo(order.getOrderItems());
+        Map<String, Integer> requiredQuantityFromBarcodes = Helper.aggregateOrderItemsByBarcodePojo(order.getOrderItems());
 
-        // ProductMap Creation for Product Name access via memory
         List<String> barcodes = new ArrayList<>(requiredQuantityFromBarcodes.keySet());
         List<ProductPojo> products = productApi.findByBarcodes(barcodes);
-        Map<String, ProductPojo> productMap = Utils.mapBarcodeWithProductPojo(products);
+        Map<String, ProductPojo> productMap = Helper.mapBarcodeWithProductPojo(products);
 
         List<InventoryPojo> inventories = inventoryApi.findByBarcodes(barcodes);
-        Map<String, InventoryPojo> inventoryMap = Utils.mapBarcodeWithInventoryPojo(inventories);
+        Map<String, InventoryPojo> inventoryMap = Helper.mapBarcodeWithInventoryPojo(inventories);
 
-        // Inventory Present or not
-        Utils.ValidationResult result = Utils.validateOrderFulfillment(requiredQuantityFromBarcodes, productMap, inventoryMap);
+        Helper.ValidationResult result = Helper.validateOrderFulfillment(requiredQuantityFromBarcodes, productMap, inventoryMap);
         boolean canFulfill = result.canFulfill();
         List<String> errors = result.errors();
 
-        // inventory reduction and response
-        if(canFulfill){
+        OrderView view = new OrderView();
+        view.setProductMap(productMap);
+
+        if (canFulfill) {
             inventoryApi.reduceInventory(requiredQuantityFromBarcodes);
             order.setOrderStatus(OrderStatus.FULFILLED);
             OrderPojo saved = orderApi.saveOrder(order);
-            return Utils.buildOrderResponse(saved,"Order fulfilled successfully",Collections.emptyList(),productMap);
+            view.setOrder(saved);
+            view.setMessage("Order fulfilled successfully");
+            view.setErrors(Collections.emptyList());
+        } else {
+            view.setOrder(order);
+            view.setMessage("Inventory still unavailable");
+            view.setErrors(errors);
         }
-        return Utils.buildOrderResponse(order, "Inventory still unavailable",errors,productMap);
+        return view;
     }
 
-    public OrderData cancelOrder(String orderId) {
-        // cancel -> check if orderId is valid and based on status process
-        // Unfulfilled -> Change state to cancel, Fulfilled -> Increse Inventory and state change,
-        // Cancel -> already cancel, Invoiced -> Cannot cancel, Otherwise -> Invalid State (not possible)
-
+    @Transactional
+    public OrderView cancelOrder(String orderId) {
         OrderPojo order = orderApi.getOrderById(orderId);
 
-        if(order == null){
-            throw new ApiException("Invalid Order");
+        if (!CANCELLABLE_STATES.contains(order.getOrderStatus())) {
+            String message = switch (order.getOrderStatus()) {
+                case CANCELLED -> "Order already cancelled";
+                case INVOICED -> "Invoiced order cannot be cancelled";
+                default -> "Order cannot be cancelled in its current state";
+            };
+            throw new ApiException(message);
         }
-        if(order.getOrderStatus() == OrderStatus.CANCELLED){
-            throw new ApiException("Order already cancelled");
-        }
-        if(order.getOrderStatus() == OrderStatus.INVOICED){
-            throw new ApiException("Order cannot be cancelled");
-        }
-        if(order.getOrderStatus() == OrderStatus.FULFILLED){
+
+        if (order.getOrderStatus() == OrderStatus.FULFILLED) {
             inventoryApi.restoreInventory(order.getOrderItems());
         }
+
         order.setOrderStatus(OrderStatus.CANCELLED);
-
-        // Aggregate Products
-        Map<String,Integer> requiredQuantityFromBarcodes = Utils.aggregateOrderItemsByBarcodePojo(order.getOrderItems());
-
-        // ProductMap Creation for Product Name access via memory
-        List<ProductPojo> products = productApi.findByBarcodes(requiredQuantityFromBarcodes.keySet());
-        Map<String, ProductPojo> productMap = Utils.mapBarcodeWithProductPojo(products);
-
         OrderPojo savedOrder = orderApi.saveOrder(order);
-        return Utils.buildOrderResponse(savedOrder,"Order cancelled successfully",Collections.emptyList(),productMap);
+
+        Set<String> barcodes = Helper.barcodesFromOrderPojo(List.of(savedOrder));
+        List<ProductPojo> products = productApi.findByBarcodes(barcodes);
+        Map<String, ProductPojo> productMap = Helper.mapBarcodeWithProductPojo(products);
+
+        return Helper.orderViewBuilder(productMap, savedOrder);
     }
 }

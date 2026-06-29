@@ -12,6 +12,6 @@ public interface DaySalesDao extends MongoRepository<DaySalesReportPojo, String>
 
     DaySalesReportPojo findByDate(LocalDate date);
 
-    List<DaySalesReportPojo> findByDateBetween(LocalDate startDate, LocalDate endDate);
+    List<DaySalesReportPojo> findAllByOrderByDateDesc();
 
 }

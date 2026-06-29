@@ -17,18 +17,24 @@ public class SessionApi {
     SessionDao sessionDao;
 
     public SessionPojo createSession(UserPojo user){
+        Instant now = Instant.now();
 
         SessionPojo session = new SessionPojo();
 
         session.setUserId(user.getId());
         session.setSessionId(UUID.randomUUID().toString());
-        session.setExpiresAt(Instant.now().plus(5, ChronoUnit.MINUTES));
+        session.setCreatedAt(now);
+        session.setExpiresAt(now.plus(5, ChronoUnit.MINUTES));
 
         return sessionDao.save(session);
     }
 
     public SessionPojo findBySessionId(String sessionId){
         return sessionDao.findBySessionId(sessionId);
+    }
+
+    public SessionPojo updateSession(SessionPojo session) {
+        return sessionDao.save(session);
     }
 
     public void delete(String sessionId){

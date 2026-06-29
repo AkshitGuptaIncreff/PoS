@@ -3,13 +3,14 @@ package com.example.pos.controller;
 import com.example.pos.dto.InventoryDto;
 import com.example.pos.models.InventoryData;
 import com.example.pos.models.InventoryForm;
+import com.example.pos.models.PageData;
+import com.example.pos.models.UploadResult;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
-
+@CrossOrigin(origins = "http://localhost:3000", allowedHeaders = "*")
 @RestController
 @RequestMapping("/inventory")
 public class InventoryController {
@@ -23,12 +24,13 @@ public class InventoryController {
     }
 
     @RequestMapping(method = RequestMethod.GET)
-    public List<InventoryData> getAllInventory(){
-        return inventoryDto.getAllInventory();
+    public PageData<InventoryData> getAllInventory(@RequestParam(defaultValue = "0") int page,
+                                                   @RequestParam(defaultValue = "10") int size){
+        return inventoryDto.getAllInventory(page,size);
     }
 
     @RequestMapping(method = RequestMethod.POST,path = "/upload")
-    public List<InventoryData> uploadInventoryTsv(@RequestParam("file") MultipartFile file){
+    public UploadResult<InventoryData> uploadInventoryTsv(@RequestParam("file") MultipartFile file){
         return inventoryDto.uploadInventoryTsv(file);
     }
 }

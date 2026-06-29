@@ -1,16 +1,16 @@
 package com.example.pos.dto;
 
-import com.example.pos.api.DaySalesApi;
 import com.example.pos.api.ReportApi;
 import com.example.pos.flow.AuthFlow;
-import com.example.pos.util.Utils;
-import com.example.pos.models.DaySalesReportForm;
+import com.example.pos.util.Helper;
 import com.example.pos.models.SalesReportData;
 import com.example.pos.models.SalesReportForm;
-import com.example.pos.models.db.DaySalesReportPojo;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.RequestBody;
 
+import java.time.Instant;
 import java.util.List;
 
 @Component
@@ -20,24 +20,14 @@ public class ReportDto {
     private ReportApi reportApi;
 
     @Autowired
-    private DaySalesApi daySalesApi;
-
-    @Autowired
     AuthFlow authFlow;
 
     public List<SalesReportData> getSalesReport(SalesReportForm form) {
         authFlow.checkSupervisor();
 
-        String client = form.getClientName();
-        client = Utils.trimAndLowercase(client);
+        String client = form.getClientId();
+        Helper.validateSalesReport(form);
 
-        return reportApi.getSalesReport(form.getStartDate(),form.getEndDate(),client);
+        return reportApi.getSalesReport(form.getStartDate().toInstant(),form.getEndDate().toInstant(),client);
     }
-
-    public List<DaySalesReportPojo> getDaySalesReport(DaySalesReportForm form){
-        authFlow.checkSupervisor();
-
-        return daySalesApi.getDaySalesReport(form.getStartDate(), form.getEndDate());
-    }
-
 }

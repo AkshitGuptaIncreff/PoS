@@ -4,6 +4,7 @@ import com.example.pos.dto.ProductDto;
 import com.example.pos.models.FilterProductForm;
 import com.example.pos.models.ProductData;
 import com.example.pos.models.ProductForm;
+import com.example.pos.models.UploadResult;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -11,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+@CrossOrigin(origins = "http://localhost:3000", allowedHeaders = "*")
 @RestController
 @RequestMapping("/products")
 public class ProductController {
@@ -28,13 +30,13 @@ public class ProductController {
         return productDto.getAllProducts();
     }
 
-    @RequestMapping(method = RequestMethod.PUT, path="/{productId}")
-    public ProductData updateProduct(@PathVariable String productId,@Valid @RequestBody ProductForm productForm) {
-        return productDto.updateProduct(productId,productForm);
+    @RequestMapping(method = RequestMethod.PUT, path="/update")
+    public ProductData updateProduct(@Valid @RequestBody ProductForm productForm) {
+        return productDto.updateProduct(productForm);
     }
 
     @RequestMapping(method = RequestMethod.POST, path = "/upload")
-    public List<ProductData> uploadProductTsv(@RequestParam("file") MultipartFile file){
+    public UploadResult<ProductData> uploadProductTsv(@RequestParam("file") MultipartFile file){
         return productDto.uploadProductTsv(file);
     }
 

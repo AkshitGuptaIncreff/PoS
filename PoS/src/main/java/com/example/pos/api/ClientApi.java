@@ -1,14 +1,19 @@
 package com.example.pos.api;
 
 import com.example.pos.dao.ClientDao;
-import com.example.pos.flow.AuthFlow;
 import com.example.pos.models.db.ClientPojo;
 import com.example.pos.util.ApiException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class ClientApi {
@@ -16,61 +21,51 @@ public class ClientApi {
     @Autowired
     ClientDao clientDao;
 
-    @Autowired
-    AuthFlow authFlow;
-
-    public ClientPojo createClient(String clientName, String email){
-        authFlow.checkSupervisor();
-
-        boolean clientPojoExists = clientDao.existsByName(clientName);
-
-        if(clientPojoExists) {
-            throw new ApiException("Client already exists");
-        }
-
-        ClientPojo clientPojo = new ClientPojo();
-        clientPojo.setName(clientName);
-        clientPojo.setEmail(email);
-
+    @Transactional
+    public ClientPojo createClient(ClientPojo clientPojo){
         return clientDao.save(clientPojo);
     }
 
-    public List<ClientPojo> getAllClients(){
-        return clientDao.findAll();
-    }
-
-    public ClientPojo updateClient(String clientName, String email){
-        authFlow.checkSupervisor();
-
-        ClientPojo clientPojo = clientDao.findByName(clientName);
-        if(clientPojo == null){
-            throw new ApiException("Client not found");
-        }
-        clientPojo.setEmail(email);
-
+    @Transactional
+    public ClientPojo updateClient(ClientPojo clientPojo){
         return clientDao.save(clientPojo);
     }
 
-    public List<ClientPojo> filterClientsByName(String clientName) {
-        List<ClientPojo> clientPojoList = clientDao.findByNameContainingIgnoreCase(clientName);
-        if(clientPojoList.isEmpty()){
-            throw new ApiException("Clients not found");
-        }
-        return clientPojoList;
+    public Page<ClientPojo> getAllClients(int page, int size){
+        Pageable pageable = PageRequest.of(page, size, Sort.by("name"));
+        return clientDao.findAll(pageable);
     }
 
-    public ClientPojo getClientById(String clientId){
-        ClientPojo clientPojoById =clientDao.findById(clientId)
-                .orElseThrow(() -> new ApiException("Client not found"));
-        return clientPojoById;
+    public Page<ClientPojo> filterClientsByName(String clientName, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return clientDao.findByNameContainingIgnoreCase(clientName, pageable);
     }
 
     public List<ClientPojo> findByNames(Collection<String> names){
-        List<ClientPojo> clientPojoList = clientDao.findByNameIn(names);
-        return clientPojoList;
+        return clientDao.findByNameIn(names);
     }
 
     public ClientPojo getClientByName(String clientName) {
-        return clientDao.findByName(clientName);
+        ClientPojo client = clientDao.findByName(clientName);
+        if (client == null) {
+            throw new ApiException("Client not found");
+        }
+        return client;
+    }
+
+    public ClientPojo getClientByClientId(String clientId) {
+        if (clientId == null) {
+            throw new ApiException("Client not found");
+        }
+        return clientDao.findByClientId(clientId)
+                .orElseThrow(() -> new ApiException("Client not found"));
+    }
+
+    public boolean existsByEmail(String email) {
+        return clientDao.existsByEmail(email);
+    }
+
+    public boolean existsByName(String name) {
+        return clientDao.existsByName(name);
     }
 }

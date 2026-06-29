@@ -3,16 +3,15 @@ package com.example.pos.api;
 import com.example.pos.dao.ProductDao;
 import com.example.pos.models.db.ProductPojo;
 import com.example.pos.util.ApiException;
-import com.example.pos.models.ProductForm;
-import com.example.pos.util.Utils;
 import org.springframework.beans.factory.annotation.Autowired;
-
-import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.List;
 
 @Service
 public class ProductApi {
@@ -22,15 +21,8 @@ public class ProductApi {
     @Autowired
     private MongoTemplate mongoTemplate;
 
-    public ProductPojo createProduct(ProductForm productForm){
-        ProductPojo product = productDao.findByBarcode(productForm.getBarcode());
-
-        if (product != null) {
-            throw new ApiException("Barcode already exists");
-        }
-
-        ProductPojo productPojo = Utils.productFormToPojo(productForm);
-
+    @Transactional
+    public ProductPojo createProduct(ProductPojo productPojo){
         return productDao.save(productPojo);
     }
 
@@ -38,15 +30,16 @@ public class ProductApi {
         return productDao.findAll();
     }
 
+    @Transactional
     public ProductPojo updateProduct(ProductPojo productPojo){
         return productDao.save(productPojo);
     }
 
-    public List<ProductPojo> filterProduct(String name, String barcode, String clientName) {
+    public List<ProductPojo> filterProduct(String name, String barcode, String clientId) {
         int count = 0;
         if(name != null && !name.isBlank()) count++;
         if(barcode != null && !barcode.isBlank()) count++;
-        if(clientName != null && !clientName.isBlank()) count++;
+        if(clientId != null && !clientId.isBlank()) count++;
 
         if(count != 1){
             throw new ApiException("Exactly one filter must be provided");
@@ -60,7 +53,7 @@ public class ProductApi {
             query.addCriteria(Criteria.where("barcode").regex(barcode, "i"));
         }
         else{
-            query.addCriteria(Criteria.where("clientName").is(clientName));
+            query.addCriteria(Criteria.where("clientId").is(clientId));
         }
         return mongoTemplate.find(query, ProductPojo.class);
     }
@@ -73,10 +66,6 @@ public class ProductApi {
         return productDao.findByBarcodeIn(barcodes);
     }
 
-    public boolean existsByBarcode(String barcode){
-        return productDao.existsByBarcode(barcode);
-    }
-
     public List<ProductPojo> bulkInsert(List<ProductPojo> products) {
         return productDao.saveAll(products);
     }
@@ -87,5 +76,13 @@ public class ProductApi {
 
     public ProductPojo findById(String productId) {
         return productDao.findById(productId).orElseThrow(() -> new ApiException("Product not found"));
+    }
+
+    public boolean existsByBarcode(String barcode) {
+        return productDao.existsByBarcode(barcode);
+    }
+
+    public ProductPojo findByBarcode(String barcode) {
+        return productDao.findByBarcode(barcode);
     }
 }

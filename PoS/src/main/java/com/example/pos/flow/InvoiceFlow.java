@@ -1,12 +1,14 @@
 package com.example.pos.flow;
 
+import com.example.pos.InvoiceClient;
 import com.example.pos.api.ProductApi;
+import com.example.pos.models.OrderStatus;
 import com.example.pos.models.db.OrderItemPojo;
 import com.example.pos.models.db.ProductPojo;
 import com.example.invoice.module.InvoiceItems;
+import com.example.pos.util.Helper;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ByteArrayResource;
-import com.example.invoice.api.FopInvoiceApi;
 import com.example.pos.api.InvoiceApi;
 import com.example.pos.api.OrderApi;
 import com.example.pos.util.ApiException;
@@ -21,12 +23,11 @@ import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
-@Service
+@Service("posInvoiceFlow")
 public class InvoiceFlow {
 
     @Autowired
@@ -36,7 +37,7 @@ public class InvoiceFlow {
     InvoiceApi invoiceApi;
 
     @Autowired
-    FopInvoiceApi fopInvoiceApi;
+    private InvoiceClient invoiceClient;
 
     @Autowired
     ProductApi productApi;
@@ -45,39 +46,42 @@ public class InvoiceFlow {
     public ResponseEntity<Resource> downloadInvoice(String orderId) {
 
         OrderPojo order = orderApi.getOrderById(orderId);
-        if(order == null){
-            throw new ApiException("Order not found");
-        }
 
         InvoicePojo existing = invoiceApi.findByOrderId(orderId);
-        if(existing != null){
+        if (existing != null) {
             return downloadExisting(existing);
         }
+
+        if (order.getOrderStatus() != OrderStatus.FULFILLED) {
+            throw new ApiException("Order must be fulfilled before generating an invoice");
+        }
+
         return generateAndDownload(order);
     }
 
-    private ResponseEntity<Resource> generateAndDownload(OrderPojo order){
+    private ResponseEntity<Resource> generateAndDownload(OrderPojo order) {
         try {
             InvoiceForm form = buildInvoiceForm(order);
 
-            String base64 = fopInvoiceApi.invoiceGenerator(form);
+            String base64 = invoiceClient.generateInvoice(form);
             byte[] pdf = Base64.getDecoder().decode(base64);
 
             Files.createDirectories(Path.of("invoices"));
             Path path = Path.of("invoices", form.getOrderId() + ".pdf");
             Files.write(path, pdf);
 
-            InvoicePojo invoice = new InvoicePojo();
-            invoice.setOrderId(form.getOrderId());
-            invoice.setInvoiceNumber("INV-" + form.getOrderId());
-            invoice.setPdfPath(path.toString());
-            invoice.setGeneratedAt(Instant.now());
-
+            InvoicePojo invoice = Helper.invoiceBuilder(form, path);
             invoiceApi.save(invoice);
+
+            order.setOrderStatus(OrderStatus.INVOICED);
+            orderApi.saveOrder(order);
+
             return buildPdfResponse(pdf);
 
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
-            throw new ApiException("Failed to generate invoice");
+            throw new ApiException("Failed to generate invoice: " + e.getMessage());
         }
     }
 
@@ -103,35 +107,22 @@ public class InvoiceFlow {
 
     private InvoiceForm buildInvoiceForm(OrderPojo orderPojo) {
 
-        InvoiceForm invoiceForm = new InvoiceForm();
-        invoiceForm.setInvoiceNumber("INV-" + orderPojo.getId());
-        invoiceForm.setOrderId(orderPojo.getId());
-        invoiceForm.setCustomerName(orderPojo.getCustomerName());
-        invoiceForm.setOrderTime(orderPojo.getOrderTime());
-
-        System.out.println(invoiceForm.getCustomerName());
+        InvoiceForm invoiceForm = Helper.createInvoiceFormFromPojo(orderPojo);
 
         List<InvoiceItems> invoiceItems = new ArrayList<>();
 
         double grandTotal = 0.0;
 
-        for(OrderItemPojo orderItem : orderPojo.getOrderItems()) {
+        for (OrderItemPojo orderItem : orderPojo.getOrderItems()) {
             ProductPojo product = productApi.getProductByBarcode(orderItem.getBarcode());
 
-            if(product == null) {
-                throw new ApiException("Product not found");
+            if (product == null) {
+                throw new ApiException("Product not found for barcode: " + orderItem.getBarcode());
             }
 
-            InvoiceItems invoiceItem = new InvoiceItems();
-            invoiceItem.setBarcode(orderItem.getBarcode());
-            invoiceItem.setProductName(product.getName());
-            invoiceItem.setQuantity(orderItem.getOrderQuantity());
-            invoiceItem.setSellingPrice(orderItem.getSellingPrice());
+            InvoiceItems invoiceItem = Helper.createInvoiceForm(orderItem, product);
 
-            double itemTotal = orderItem.getOrderQuantity() * orderItem.getSellingPrice();
-            invoiceItem.setTotalAmount(itemTotal);
-            grandTotal += itemTotal;
-
+            grandTotal += invoiceItem.getTotalAmount();
             invoiceItems.add(invoiceItem);
         }
         invoiceForm.setItems(invoiceItems);

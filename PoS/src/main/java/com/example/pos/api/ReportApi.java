@@ -14,8 +14,8 @@ public class ReportApi {
     ReportsDao reportsDao;
 
 
-    public List<SalesReportData> getSalesReport(Instant start,Instant end,String name){
-        return reportsDao.getSalesReport(start,end,name);
+    public List<SalesReportData> getSalesReport(Instant start, Instant end, String clientId){
+        return reportsDao.getSalesReport(start,end,clientId);
     }
 
 }

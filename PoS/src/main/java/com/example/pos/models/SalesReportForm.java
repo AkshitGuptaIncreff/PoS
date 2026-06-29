@@ -1,17 +1,21 @@
 package com.example.pos.models;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.Instant;
+import java.time.ZonedDateTime;
 
 @Getter
 @Setter
 public class SalesReportForm {
 
-    private Instant startDate;
+    @NotNull(message = "Start date is required")
+    private ZonedDateTime startDate;
 
-    private Instant endDate;
+    @NotNull(message = "End date is required")
+    private ZonedDateTime endDate;
 
-    private String clientName;
+    @NotNull(message = "Client Id not found")
+    private String clientId;
 }

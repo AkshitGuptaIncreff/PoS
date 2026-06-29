@@ -1,6 +1,7 @@
 package com.example.pos.controller;
 
 import com.example.pos.models.OrderData;
+import com.example.pos.models.PageData;
 import com.example.pos.dto.OrderDto;
 import com.example.pos.models.CreateOrderForm;
 import jakarta.validation.Valid;
@@ -8,9 +9,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
-import java.util.List;
 
-
+@CrossOrigin(origins = "http://localhost:3000", allowedHeaders = "*")
 @RestController
 @RequestMapping("/order")
 public class OrderController {
@@ -24,9 +24,13 @@ public class OrderController {
     }
 
     @RequestMapping(method = RequestMethod.GET)
-    public List<OrderData> getOrders(@RequestParam(required = false) String orderId, @RequestParam(required = false) String status,
-                                     @RequestParam(required = false) Instant startDate, @RequestParam(required = false) Instant endDate){
-        return orderDto.getOrders(orderId,status,startDate,endDate);
+    public PageData<OrderData> getOrders(@RequestParam(required = false) String orderId,
+                                         @RequestParam(required = false) String status,
+                                         @RequestParam(required = false) Instant startDate,
+                                         @RequestParam(required = false) Instant endDate,
+                                         @RequestParam(defaultValue = "0") int page,
+                                         @RequestParam(defaultValue = "10") int size){
+        return orderDto.getOrders(orderId, status, startDate, endDate, page, size);
     }
 
 

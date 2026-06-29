@@ -1,11 +1,13 @@
 package com.example.pos.controller;
 
+import com.example.pos.UserContext;
 import com.example.pos.dto.AuthDto;
 import com.example.pos.models.AuthData;
 import com.example.pos.models.AuthForm;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+@CrossOrigin(origins = "http://localhost:3000", allowedHeaders = "*")
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
@@ -24,7 +26,7 @@ public class AuthController {
     }
 
     @RequestMapping(method = RequestMethod.POST, path ="/validate")
-    public AuthData validate(@RequestHeader("sessionId") String sessionId){
-        return authDto.validate(sessionId);
+    public AuthData validate(){
+        return authDto.validate(UserContext.getUser());
     }
 }

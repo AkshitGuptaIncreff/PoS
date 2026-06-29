@@ -1,7 +1,9 @@
 package com.example.pos.dto;
 
-import com.example.pos.util.Utils;
+import com.example.pos.models.PageData;
+import com.example.pos.util.Helper;
 import com.example.pos.models.OrderData;
+import com.example.pos.models.OrderView;
 import com.example.pos.flow.OrderFlow;
 import com.example.pos.models.CreateOrderForm;
 import com.example.pos.models.OrderStatus;
@@ -9,7 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.List;
 
 @Component
 public class OrderDto {
@@ -18,27 +19,40 @@ public class OrderDto {
     private OrderFlow orderFlow;
 
     public OrderData createOrder(CreateOrderForm createOrderForm) {
-        String customerName = Utils.trimAndLowercase(createOrderForm.getCustomerName());
+        String customerName = Helper.trimAndLowercase(createOrderForm.getCustomerName());
         createOrderForm.setCustomerName(customerName);
 
-        return orderFlow.createOrder(createOrderForm);
+        String email = Helper.trimAndLowercase(createOrderForm.getEmail());
+        createOrderForm.setEmail(email);
+
+        OrderView view = orderFlow.createOrder(createOrderForm);
+        return Helper.orderViewToData(view);
     }
 
-    public List<OrderData> getOrders(String orderId, String status, Instant startDate, Instant endDate) {
-
+    public PageData<OrderData> getOrders(String orderId, String status, Instant startDate, Instant endDate, int page, int size) {
         OrderStatus orderStatus = null;
-        if(status != null){
+        if (status != null) {
             orderStatus = OrderStatus.valueOf(status.toUpperCase());
         }
 
-        return orderFlow.getOrders(orderId,orderStatus,startDate,endDate);
+        PageData<OrderView> pageData = orderFlow.getOrders(orderId, orderStatus, startDate, endDate, page, size);
+
+        PageData<OrderData> result = new PageData<>();
+        result.setContent(Helper.orderViewListToDataList(pageData.getContent()));
+        result.setTotalElements(pageData.getTotalElements());
+        result.setTotalPages(pageData.getTotalPages());
+        result.setPage(pageData.getPage());
+        result.setSize(pageData.getSize());
+        return result;
     }
 
     public OrderData retryOrder(String orderId) {
-        return orderFlow.retryOrder(orderId);
+        OrderView view = orderFlow.retryOrder(orderId);
+        return Helper.orderViewToData(view);
     }
 
     public OrderData cancelOrder(String orderId) {
-        return orderFlow.cancelOrder(orderId);
+        OrderView view = orderFlow.cancelOrder(orderId);
+        return Helper.orderViewToData(view);
     }
 }

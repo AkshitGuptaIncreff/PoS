@@ -5,6 +5,10 @@ import com.example.pos.models.db.InventoryPojo;
 import com.example.pos.models.db.OrderItemPojo;
 import com.example.pos.util.ApiException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
@@ -26,8 +30,9 @@ public class InventoryApi {
         return inventoryDao.save(inventory);
     }
 
-    public List<InventoryPojo> getAllInventory(){
-        return inventoryDao.findAll();
+    public Page<InventoryPojo> getAllInventory(int page, int size){
+        Pageable pageable = PageRequest.of(page, size, Sort.by("barcode"));
+        return inventoryDao.findAll(pageable);
     }
 
     public List<InventoryPojo> bulkSave(List<InventoryPojo> inventories){

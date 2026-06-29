@@ -1,12 +1,9 @@
 package com.example.pos.dto;
 
-import com.example.pos.api.ProductApi;
-import com.example.pos.models.db.ProductPojo;
 import com.example.pos.flow.ProductFlow;
-import com.example.pos.models.FilterProductForm;
-import com.example.pos.models.ProductData;
-import com.example.pos.models.ProductForm;
-import com.example.pos.util.Utils;
+import com.example.pos.models.*;
+import com.example.pos.models.db.ProductPojo;
+import com.example.pos.util.Helper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -19,52 +16,36 @@ public class ProductDto {
     @Autowired
     private ProductFlow productFlow;
 
-    @Autowired
-    private ProductApi productApi;
-
-
     public ProductData createProduct(ProductForm productForm) {
-        String productName = Utils.trimAndLowercase(productForm.getName());
-        String clientName = Utils.trimAndLowercase(productForm.getClientName());
-
-        productForm.setName(productName);
-        productForm.setClientName(clientName);
-
-        ProductPojo productPojo = productApi.createProduct(productForm);
-        return Utils.productPojoToData(productPojo);
+        ProductForm form = Helper.productFormValidation(productForm);
+        ProductPojo productPojo = Helper.productFormToPojo(form);
+        ProductView view = productFlow.createProduct(productPojo);
+        return Helper.productViewToData(view);
     }
 
     public List<ProductData> getAllProducts() {
-        List<ProductPojo> products = productApi.getAllProducts();
-        return Utils.productPojoListToDataList(products);
+        List<ProductView> views = productFlow.getAllProductViews();
+        return Helper.productViewListToDataList(views);
     }
 
-    public ProductData updateProduct(String productId,ProductForm productForm) {
-
-        String productName = Utils.trimAndLowercase(productForm.getName());
-        String clientName = Utils.trimAndLowercase(productForm.getClientName());
-        productForm.setName(productName);
-        productForm.setClientName(clientName);
-
-        ProductPojo productPojo = productFlow.updateProduct(productId,productForm);
-
-        ProductData productData = Utils.productPojoToData(productPojo);
-        return productData;
+    public ProductData updateProduct(ProductForm productForm) {
+        ProductForm form = Helper.productFormValidation(productForm);
+        ProductPojo productPojo = Helper.productFormToPojo(form);
+        ProductView view = productFlow.updateProduct(productPojo);
+        return Helper.productViewToData(view);
     }
 
     public List<ProductData> filterProduct(FilterProductForm filterProductForm) {
-
-        String productName = filterProductForm.getProductName();
-        String clientName = filterProductForm.getClientName();
-        String barcode = filterProductForm.getBarcode();
-
-        List<ProductPojo> productPojos = productApi.filterProduct(productName,barcode,clientName);
-        return Utils.productPojoListToDataList(productPojos);
+        List<ProductView> views = productFlow.filterProductViews(filterProductForm);
+        return Helper.productViewListToDataList(views);
     }
 
-    public List<ProductData> uploadProductTsv(MultipartFile file) {
-        List<ProductForm> productForms = Utils.parseProductTsv(file);
-        List<ProductPojo> productPojos = productFlow.uploadProductTsv(productForms);
-        return Utils.productPojoListToDataList(productPojos);
+    public UploadResult<ProductData> uploadProductTsv(MultipartFile file) {
+        List<ProductForm> productForms = Helper.parseProductTsv(file);
+        ProductFlow.UploadResult uploadResult = productFlow.uploadProductTsv(productForms);
+        List<ProductData> importedData = Helper.productViewListToDataList(uploadResult.getImported());
+
+        UploadResult<ProductData> result = Helper.productResultMapper(uploadResult,importedData);
+        return result;
     }
 }

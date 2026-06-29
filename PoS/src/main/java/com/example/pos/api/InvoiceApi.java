@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import com.example.pos.models.db.InvoicePojo;
 import org.springframework.stereotype.Service;
 
-@Service
+@Service("posInvoiceApi")
 @RequiredArgsConstructor
 public class InvoiceApi {
 

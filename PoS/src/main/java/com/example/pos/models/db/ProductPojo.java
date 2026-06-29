@@ -12,9 +12,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class ProductPojo {
     @Id
     private String id;
+
     @Indexed(unique = true)
     private String barcode;
-    private String clientName;
+
+    @Indexed(unique = true)
+    private String clientId;
     private String name;
     private Double mrp;
     private String imageUrl;

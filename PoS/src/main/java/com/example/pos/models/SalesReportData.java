@@ -7,7 +7,7 @@ import lombok.Setter;
 @Setter
 public class SalesReportData {
 
-    private String clientName;
+    private String clientId;
     private String productName;
     private Integer quantity;
     private Double revenue;

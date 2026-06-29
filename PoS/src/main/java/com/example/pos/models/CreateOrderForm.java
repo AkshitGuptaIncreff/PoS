@@ -16,6 +16,7 @@ public class CreateOrderForm {
     @NotBlank(message = "Please provide customer name")
     private String customerName;
 
+    @NotBlank(message = "Email cannot be empty")
     @Email(message = "Please provide a valid email")
     private String email;
 

@@ -8,5 +8,6 @@ import lombok.Setter;
 public class FilterProductForm {
     String productName;
     String clientName;
+    String clientId;
     String barcode;
 }

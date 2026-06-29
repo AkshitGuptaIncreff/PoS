@@ -1,6 +1,6 @@
 package com.example.pos;
 
-import com.example.pos.api.DaySalesApi;
+import com.example.pos.flow.DaySalesFlow;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -12,11 +12,11 @@ import java.time.LocalDate;
 @RequestMapping("/test")
 public class TestScheduler {
     @Autowired
-    private DaySalesApi daySalesApi;
+    private DaySalesFlow daySalesFlow;
 
     @PostMapping("/generate-day-sales")
     public String generate(){
-        daySalesApi.generateDaySales(LocalDate.of(2026, 6, 19));
+        daySalesFlow.generateDaySales(LocalDate.of(2026, 6, 19));
         return "done";
     }
 }

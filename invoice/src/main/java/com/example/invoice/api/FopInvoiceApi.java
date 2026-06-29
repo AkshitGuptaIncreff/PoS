@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import java.util.Base64;
 
 @Service
-public class FopInvoiceApi implements invoiceApi{
+public class FopInvoiceApi implements InvoiceApi {
 
     @Override
     public String invoiceGenerator(InvoiceForm invoiceForm) {
